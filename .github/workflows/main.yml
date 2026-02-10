@@ -55,8 +55,8 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      # 🔥 SÜRÜM: 6.0.0
-      - name: Build IPA (FINAL BUILD 6.0.0)
+      # 🔥 SÜRÜM: 7.0.0
+      - name: Build IPA (FINAL BUILD 7.0.0)
         run: flutter build ipa --release --no-codesign --build-name=6.0.0 --build-number=${{ github.run_number }}
 
       # 2. XML ve İmza Hatalarını Çözen Kritik "FIX" Adımı
