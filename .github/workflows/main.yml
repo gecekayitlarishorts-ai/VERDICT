@@ -57,7 +57,7 @@ jobs:
 
       # 🔥 SÜRÜM GÜNCELLEMESİ: 6.0.0 yapıldı
       - name: Build IPA (FINAL BUILD 6.0.0)
-        run: flutter build ipa --release --no-codesign --build-name=5.0.0 --build-number=${{ github.run_number }}
+        run: flutter build ipa --release --no-codesign --build-name=6.0.0 --build-number=${{ github.run_number }}
 
       # 2. XML ve İmza Hatalarını Çözen "FIX" Adımı
       - name: Sign & Fix IPA
