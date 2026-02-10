@@ -13,7 +13,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 🚀 HATA DÜZELTME: Mevcut olan en yüksek Xcode sürümünü bulup seçiyoruz
+      # 🚀 En yüksek Xcode sürümünü seçiyoruz
       - name: Set Latest Xcode Version
         run: |
           XCODE_PATH=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
@@ -55,11 +55,11 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      # 🔥 SÜRÜM GÜNCELLEMESİ: 6.0.0 yapıldı
+      # 🔥 SÜRÜM: 6.0.0
       - name: Build IPA (FINAL BUILD 6.0.0)
         run: flutter build ipa --release --no-codesign --build-name=6.0.0 --build-number=${{ github.run_number }}
 
-      # 2. XML ve İmza Hatalarını Çözen "FIX" Adımı
+      # 2. XML ve İmza Hatalarını Çözen Kritik "FIX" Adımı
       - name: Sign & Fix IPA
         env:
           KEYCHAIN_PATH: ${{ runner.temp }}/app-signing.keychain-db
@@ -67,9 +67,17 @@ jobs:
           APP_PATH=build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
           PLIST_PATH="$APP_PATH/Info.plist"
           
-          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | head -1 | grep '"' | sed -e 's/[^"]*"//' -e 's/"//')
-          echo "✅ İmzalama Kimliği: $IDENTITY"
+          # ✅ DOĞRU KİMLİK BULMA: Sadece "Apple Distribution" sertifikasını bulur ve tırnak içindeki ismi alır
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Apple Distribution" | head -1 | awk -F '"' '{print $2}')
           
+          echo "✅ Kullanılacak İmzalama Kimliği: '$IDENTITY'"
+          
+          if [ -z "$IDENTITY" ]; then
+            echo "❌ HATA: Keychain içinde geçerli bir Apple Distribution sertifikası bulunamadı!"
+            exit 1
+          fi
+
+          # Info.plist düzenlemeleri
           /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" "$PLIST_PATH" || true
           /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" "$PLIST_PATH"
           /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" "$PLIST_PATH"
@@ -77,21 +85,26 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:2 string UIInterfaceOrientationLandscapeLeft" "$PLIST_PATH"
           /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:3 string UIInterfaceOrientationLandscapeRight" "$PLIST_PATH"
           
+          # Entitlements ve Profil eşleştirme
           security cms -D -i "$RUNNER_TEMP/build_pp.mobileprovision" > profile.plist
           /usr/libexec/PlistBuddy -x -c 'Print :Entitlements' profile.plist > entitlements.plist
-          
           cp "$RUNNER_TEMP/build_pp.mobileprovision" "$APP_PATH/embedded.mobileprovision"
           
+          # Framework'leri tek tek imzalıyoruz (Hata aldığın yer burasıydı)
           find "$APP_PATH/Frameworks" -name "*.framework" -type d | while read framework; do
+              echo "İmzalanıyor: $framework"
               /usr/bin/codesign --force --sign "$IDENTITY" --preserve-metadata=identifier,entitlements "$framework"
           done
           
+          # Kütüphaneleri imzalıyoruz
           find "$APP_PATH/Frameworks" -name "*.dylib" -type f | while read dylib; do
               /usr/bin/codesign --force --sign "$IDENTITY" --preserve-metadata=identifier,entitlements "$dylib"
           done
           
+          # En son ana uygulamayı imzalıyoruz
           /usr/bin/codesign --force --sign "$IDENTITY" --entitlements entitlements.plist "$APP_PATH"
           
+          # IPA paketleme
           mkdir -p Payload
           cp -r "$APP_PATH" Payload/
           zip -r VERDICT.ipa Payload
